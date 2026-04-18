@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAD Agent — Turn an Image into a 3D-Printable Model</title>
+  <meta name="description" content="Upload a photo of a simple object — like a stand, hook, or holder. We'll generate a model you can tweak and print." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bg: {
+              primary:   '#1a1a2e',
+              secondary: '#16213e',
+              tertiary:  '#0f3460',
+              surface:   '#1e1e3a',
+              elevated:  '#252547',
+              hover:     '#2a2a50',
+              input:     '#12122a',
+            },
+            accent: {
+              blue:   '#3b82f6',
+              indigo: '#6366f1',
+              cyan:   '#06b6d4',
+            },
+            text: {
+              primary:   '#e2e8f0',
+              secondary: '#94a3b8',
+              muted:     '#64748b',
+            },
+            border: {
+              DEFAULT: '#2a2a50',
+              light:   '#3a3a60',
+              active:  '#3b82f6',
+            },
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          animation: {
+            'fade-up':      'fadeUp 0.6s ease forwards',
+            'pulse-glow':   'pulseGlow 2s ease-in-out infinite',
+            'float':        'float 3s ease-in-out infinite',
+            'flow-right':   'flowRight 1.5s ease-in-out infinite',
+          },
+          keyframes: {
+            fadeUp: {
+              '0%':   { opacity: '0', transform: 'translateY(24px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            pulseGlow: {
+              '0%, 100%': { boxShadow: '0 0 20px rgba(59,130,246,0.3)' },
+              '50%':      { boxShadow: '0 0 40px rgba(59,130,246,0.6)' },
+            },
+            float: {
+              '0%, 100%': { transform: 'translateY(0px)' },
+              '50%':      { transform: 'translateY(-8px)' },
+            },
+            flowRight: {
+              '0%':   { opacity: '0.3', transform: 'scaleX(0.6)' },
+              '50%':  { opacity: '1',   transform: 'scaleX(1)' },
+              '100%': { opacity: '0.3', transform: 'scaleX(0.6)' },
+            },
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      background-color: #1a1a2e;
+      color: #e2e8f0;
+      font-family: 'Inter', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Gradient mesh background */
+    .mesh-bg {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .mesh-blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.15;
+    }
+
+    /* Animated gradient border on cards */
+    .card-glow {
+      position: relative;
+    }
+    .card-glow::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      background: linear-gradient(135deg, #3b82f6, #6366f1, #06b6d4);
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 0;
+    }
+    .card-glow:hover::before { opacity: 1; }
+    .card-glow > * { position: relative; z-index: 1; }
+
+    /* Step connector arrow */
+    .step-arrow {
+      animation: flowRight 1.5s ease-in-out infinite;
+    }
+
+    /* Delay utilities */
+    .delay-100 { animation-delay: 0.1s; }
+    .delay-200 { animation-delay: 0.2s; }
+    .delay-300 { animation-delay: 0.3s; }
+    .delay-400 { animation-delay: 0.4s; }
+    .delay-500 { animation-delay: 0.5s; }
+
+    /* Scroll-triggered fade-up */
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Pipeline visual */
+    .pipeline-node {
+      background: linear-gradient(135deg, #1e1e3a, #252547);
+      border: 1px solid #3a3a60;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .pipeline-node:hover {
+      border-color: #3b82f6;
+      transform: translateY(-4px);
+    }
+
+    /* Email input focus ring */
+    .email-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
+    }
+
+    /* Gradient text */
+    .gradient-text {
+      background: linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #06b6d4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* CTA button */
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(59,130,246,0.4);
+    }
+    .btn-primary:active { transform: translateY(0); }
+
+    /* Navbar glass */
+    .navbar {
+      background: rgba(26,26,46,0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(42,42,80,0.8);
+    }
+
+    /* Feature icon ring */
+    .icon-ring {
+      background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(99,102,241,0.15));
+      border: 1px solid rgba(59,130,246,0.3);
+    }
+
+    /* Chat typing indicator */
+    .typing-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: #94a3b8;
+      animation: typingBounce 1.1s ease-in-out infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.18s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes typingBounce {
+      0%,80%,100% { transform:translateY(0); opacity:0.5; }
+      40% { transform:translateY(-4px); opacity:1; }
+    }
+
+    /* Brace selection glow */
+    #cw-brace-select {
+      filter: drop-shadow(0 0 6px rgba(6,182,212,0.85));
+    }
+
+    /* Editing toolbar */
+    .tool-btn {
+      position: relative;
+      width: 30px; height: 30px;
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      color: #4a5568;
+      transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+      cursor: pointer;
+      border: none; background: transparent;
+    }
+    .tool-btn:hover {
+      background: rgba(59,130,246,0.12);
+      color: #94a3b8;
+    }
+    .tool-btn.active {
+      background: rgba(59,130,246,0.20);
+      color: #3b82f6;
+      box-shadow: inset 0 0 0 1px rgba(59,130,246,0.35);
+    }
+    .tool-btn.tool-flash {
+      background: rgba(6,182,212,0.25);
+      color: #06b6d4;
+      box-shadow: 0 0 8px rgba(6,182,212,0.5), inset 0 0 0 1px rgba(6,182,212,0.5);
+    }
+    /* Tooltip */
+    .tool-btn::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: calc(100% + 7px);
+      top: 50%; transform: translateY(-50%);
+      background: #1e1e3a;
+      border: 1px solid #3a3a60;
+      color: #cbd5e1;
+      font-size: 10px;
+      font-family: Inter, sans-serif;
+      white-space: nowrap;
+      padding: 3px 7px;
+      border-radius: 5px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 50;
+    }
+    .tool-btn:hover::after { opacity: 1; }
+    .tool-divider { width: 22px; height: 1px; background: #2a2a50; margin: 2px auto; }
+
+    /* Chat input blink cursor */
+    .chat-input-active::after {
+      content: '|';
+      animation: blink 0.8s step-end infinite;
+      color: #3b82f6;
+      margin-left: 1px;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  </style>
+</head>
+<body>
+
+  <!-- ─── NAVBAR ─────────────────────────────────────────────── -->
+  <nav class="navbar fixed top-0 left-0 right-0 z-50">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <!-- Logo -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-blue to-accent-indigo flex items-center justify-center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <span class="font-bold text-lg text-text-primary tracking-tight">CAD Agent</span>
+      </div>
+
+      <!-- Nav links (hidden on mobile) -->
+      <div class="hidden md:flex items-center gap-8 text-sm font-medium text-text-secondary">
+        <a href="#how-it-works" class="hover:text-text-primary transition-colors">How it works</a>
+        <a href="#demo"         class="hover:text-text-primary transition-colors">Live Demo</a>
+        <a href="#features"     class="hover:text-text-primary transition-colors">Features</a>
+      </div>
+
+      <!-- CTA -->
+      <a href="#waitlist" class="btn-primary px-5 py-2 rounded-lg text-sm font-semibold text-white shadow-lg">
+        Join the Waitlist
+      </a>
+    </div>
+  </nav>
+
+
+  <!-- ─── HERO ───────────────────────────────────────────────── -->
+  <section class="relative min-h-screen flex items-center pt-16 overflow-hidden">
+
+    <!-- Background blobs -->
+    <div class="mesh-bg">
+      <div class="mesh-blob w-96 h-96 bg-accent-blue"   style="top:-10%;left:-5%"></div>
+      <div class="mesh-blob w-80 h-80 bg-accent-indigo" style="top:30%;right:-5%"></div>
+      <div class="mesh-blob w-64 h-64 bg-accent-cyan"   style="bottom:10%;left:40%"></div>
+    </div>
+
+    <!-- Grid pattern overlay -->
+    <div class="absolute inset-0" style="background-image:linear-gradient(rgba(59,130,246,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.04) 1px,transparent 1px);background-size:40px 40px;"></div>
+
+    <div class="relative max-w-6xl mx-auto px-6 py-24 text-center">
+
+      <!-- Badge -->
+
+      <!-- Headline -->
+      <h1 class="text-5xl md:text-7xl font-black tracking-tight leading-none mb-6 animate-fade-up delay-100">
+        Turn an Image into a<br/>
+        <span class="gradient-text">3D-Printable Model</span>
+      </h1>
+
+      <!-- Sub-headline -->
+      <p class="text-lg md:text-xl text-text-secondary max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-up delay-200">
+        Upload a photo of a simple object — like a stand, hook, or holder.
+        We'll generate a model you can tweak and print.
+      </p>
+
+      <!-- CTAs -->
+      <div class="flex flex-col sm:flex-row gap-4 justify-center mb-20 animate-fade-up delay-300">
+        <a href="#waitlist" class="btn-primary px-8 py-4 rounded-xl text-base font-bold text-white shadow-xl">
+          Join the Waitlist
+        </a>
+        <a href="#how-it-works" class="px-8 py-4 rounded-xl text-base font-semibold text-text-secondary border border-border hover:border-border-light hover:text-text-primary transition-all">
+          See How It Works
+        </a>
+      </div>
+
+      <!-- Pipeline visual -->
+      <div class="animate-fade-up delay-400">
+        <div class="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-2">
+
+          <!-- Step 1: Idea -->
+          <div class="pipeline-node rounded-2xl p-6 w-52 text-center animate-float" style="animation-delay:0s">
+            <div class="icon-ring w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>
+              </svg>
+            </div>
+            <div class="text-xs font-semibold text-accent-blue uppercase tracking-wider mb-1">Step 1</div>
+            <div class="font-semibold text-text-primary text-sm">Upload a Photo<br/>of Your Object</div>
+          </div>
+
+          <!-- Arrow -->
+          <div class="step-arrow flex items-center justify-center w-10 rotate-90 md:rotate-0">
+            <svg width="32" height="16" viewBox="0 0 32 16" fill="none">
+              <path d="M0 8 L24 8 M20 3 L29 8 L20 13" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+
+          <!-- Step 2: AI Model -->
+          <div class="pipeline-node rounded-2xl p-6 w-52 text-center animate-float" style="animation-delay:0.4s">
+            <div class="icon-ring w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+            </div>
+            <div class="text-xs font-semibold text-accent-indigo uppercase tracking-wider mb-1">Step 2</div>
+            <div class="font-semibold text-text-primary text-sm">We Generate<br/>a Starting Model</div>
+          </div>
+
+          <!-- Arrow -->
+          <div class="step-arrow flex items-center justify-center w-10 rotate-90 md:rotate-0" style="animation-delay:0.5s">
+            <svg width="32" height="16" viewBox="0 0 32 16" fill="none">
+              <path d="M0 8 L24 8 M20 3 L29 8 L20 13" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+
+          <!-- Step 3: Edit -->
+          <div class="pipeline-node rounded-2xl p-6 w-52 text-center animate-float" style="animation-delay:0.8s">
+            <div class="icon-ring w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </div>
+            <div class="text-xs font-semibold text-accent-cyan uppercase tracking-wider mb-1">Step 3</div>
+            <div class="font-semibold text-text-primary text-sm">Edit, Refine<br/>&amp; Print</div>
+          </div>
+
+          <!-- Arrow -->
+          <div class="step-arrow flex items-center justify-center w-10 rotate-90 md:rotate-0" style="animation-delay:1s">
+            <svg width="32" height="16" viewBox="0 0 32 16" fill="none">
+              <path d="M0 8 L24 8 M20 3 L29 8 L20 13" stroke="#06b6d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+
+          <!-- Step 4: Print -->
+          <div class="pipeline-node rounded-2xl p-6 w-52 text-center animate-float" style="animation-delay:1.2s">
+            <div class="icon-ring w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9"/>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                <rect x="6" y="14" width="12" height="8"/>
+              </svg>
+            </div>
+            <div class="text-xs font-semibold text-green-400 uppercase tracking-wider mb-1">Step 4</div>
+            <div class="font-semibold text-text-primary text-sm">3D Print<br/>Your Object</div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ─── HOW IT WORKS ───────────────────────────────────────── -->
+  <section id="how-it-works" class="relative py-28 overflow-hidden">
+    <div class="absolute inset-0 bg-bg-secondary"></div>
+
+    <div class="relative max-w-6xl mx-auto px-6">
+
+      <div class="text-center mb-16 reveal">
+        <div class="text-accent-blue text-sm font-semibold uppercase tracking-widest mb-3">How It Works</div>
+        <h2 class="text-4xl md:text-5xl font-bold text-text-primary mb-4">Image In. Printed Object Out.</h2>
+        <p class="text-text-secondary text-lg max-w-xl mx-auto">Three steps from a photo to a physical object you can hold.</p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8">
+
+        <!-- Step 1 -->
+        <div class="reveal" style="transition-delay:0.1s">
+          <div class="card-glow rounded-2xl overflow-hidden h-full">
+            <div class="bg-bg-elevated border border-border rounded-2xl p-8 h-full">
+              <div class="flex items-center gap-4 mb-6">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/20 border border-blue-500/30 flex items-center justify-center text-accent-blue font-black text-lg">1</div>
+                <h3 class="text-xl font-bold text-text-primary">Upload a Photo</h3>
+              </div>
+              <p class="text-text-secondary leading-relaxed mb-6">
+                Take a photo of an existing object — a stand, a holder, a hook — or find a reference image online. Works best for simple mechanical shapes.
+              </p>
+              <!-- Mini demo box -->
+              <div class="bg-bg-input border-2 border-dashed border-border-light rounded-xl p-5 text-center">
+                <svg class="mx-auto mb-2 text-text-muted" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <div class="text-sm text-text-muted">Drop your image here</div>
+                <div class="mt-2 text-xs text-text-muted opacity-60">PNG, JPG, WEBP supported</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="reveal" style="transition-delay:0.2s">
+          <div class="card-glow rounded-2xl overflow-hidden h-full">
+            <div class="bg-bg-elevated border border-border rounded-2xl p-8 h-full">
+              <div class="flex items-center gap-4 mb-6">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-accent-indigo font-black text-lg">2</div>
+                <h3 class="text-xl font-bold text-text-primary">We Generate a Starting Model</h3>
+              </div>
+              <p class="text-text-secondary leading-relaxed mb-6">
+                We analyze the image and generate a 3D model that captures the shape. It's a starting point — not a perfect scan — that you can tweak until it's right.
+              </p>
+              <!-- Mini 3D cube visual -->
+              <div class="bg-bg-input border border-border-light rounded-xl p-5 flex items-center justify-center">
+                <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+                  <polygon points="40,8 72,24 72,56 40,72 8,56 8,24" fill="rgba(99,102,241,0.1)" stroke="rgba(99,102,241,0.5)" stroke-width="1.5"/>
+                  <polygon points="40,8 72,24 40,40 8,24" fill="rgba(99,102,241,0.08)" stroke="rgba(99,102,241,0.4)" stroke-width="1"/>
+                  <line x1="40" y1="8" x2="40" y2="40" stroke="rgba(99,102,241,0.6)" stroke-width="1" stroke-dasharray="3,3"/>
+                  <line x1="40" y1="40" x2="72" y2="56" stroke="rgba(99,102,241,0.6)" stroke-width="1" stroke-dasharray="3,3"/>
+                  <line x1="40" y1="40" x2="8"  y2="56" stroke="rgba(99,102,241,0.6)" stroke-width="1" stroke-dasharray="3,3"/>
+                  <circle cx="40" cy="40" r="3" fill="#6366f1"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="reveal" style="transition-delay:0.3s">
+          <div class="card-glow rounded-2xl overflow-hidden h-full">
+            <div class="bg-bg-elevated border border-border rounded-2xl p-8 h-full">
+              <div class="flex items-center gap-4 mb-6">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 border border-cyan-500/30 flex items-center justify-center text-accent-cyan font-black text-lg">3</div>
+                <h3 class="text-xl font-bold text-text-primary">Tweak It &amp; Print</h3>
+              </div>
+              <p class="text-text-secondary leading-relaxed mb-6">
+                Say "make it taller" or "add a slot for a cable." Once it looks right, export the file and send it straight to your 3D printer.
+              </p>
+              <!-- Export badges -->
+              <div class="flex flex-wrap gap-2">
+                <span class="bg-bg-input border border-border-light text-text-secondary text-xs font-semibold px-3 py-1.5 rounded-lg">.STL</span>
+                <span class="bg-bg-input border border-border-light text-text-secondary text-xs font-semibold px-3 py-1.5 rounded-lg">.STEP</span>
+                <span class="bg-bg-input border border-border-light text-text-secondary text-xs font-semibold px-3 py-1.5 rounded-lg">.OBJ</span>
+                <span class="bg-bg-input border border-border-light text-text-secondary text-xs font-semibold px-3 py-1.5 rounded-lg">.GLB</span>
+                <span class="bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-semibold px-3 py-1.5 rounded-lg">3D Print Ready</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ─── LIVE DEMO ────────────────────────────────────────────── -->
+  <section id="demo" class="relative py-28 overflow-hidden">
+    <div class="absolute inset-0 bg-bg-primary"></div>
+    <div class="mesh-bg">
+      <div class="mesh-blob w-72 h-72 bg-accent-blue"   style="top:10%;left:-5%"></div>
+      <div class="mesh-blob w-64 h-64 bg-accent-indigo" style="bottom:5%;right:0%"></div>
+    </div>
+
+    <div class="relative max-w-6xl mx-auto px-6">
+
+      <div class="text-center mb-14 reveal">
+        <div class="text-accent-cyan text-sm font-semibold uppercase tracking-widest mb-3">Image to CAD</div>
+        <h2 class="text-4xl md:text-5xl font-bold text-text-primary mb-4">Watch the Magic Happen</h2>
+        <p class="text-text-secondary text-lg max-w-xl mx-auto">Upload a photo of a simple object. We'll generate a starting model you can tweak and print.</p>
+      </div>
+
+      <!-- App window mock -->
+      <div class="reveal max-w-5xl mx-auto">
+        <div id="demo-window" class="bg-bg-elevated border border-border-light rounded-2xl overflow-hidden shadow-2xl" style="box-shadow:0 0 60px rgba(59,130,246,0.12)">
+
+          <!-- Window chrome -->
+          <div class="flex items-center gap-2 px-4 py-3 bg-bg-surface border-b border-border">
+            <div class="w-3 h-3 rounded-full bg-red-500/70"></div>
+            <div class="w-3 h-3 rounded-full bg-yellow-500/70"></div>
+            <div class="w-3 h-3 rounded-full bg-green-500/70"></div>
+            <div class="ml-3 flex-1 bg-bg-input border border-border rounded-md px-3 py-1 text-xs text-text-muted font-mono">
+              cadagent.app/project/phone-stand
+            </div>
+            <div class="ml-2 text-xs text-text-muted font-medium hidden sm:block">CAD Agent v0.9</div>
+          </div>
+
+          <!-- Toolbar -->
+          <div class="flex items-center gap-1 px-3 py-2 bg-bg-surface border-b border-border text-xs text-text-muted">
+            <button class="px-3 py-1.5 rounded hover:bg-bg-hover transition-colors font-medium">File</button>
+            <button class="px-3 py-1.5 rounded hover:bg-bg-hover transition-colors">Edit</button>
+            <button class="px-3 py-1.5 rounded hover:bg-bg-hover transition-colors">View</button>
+            <div class="w-px h-4 bg-border mx-1"></div>
+            <button class="px-3 py-1.5 rounded bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/20 transition-colors font-semibold">AI Generate</button>
+            <div class="flex-1"></div>
+            <div id="demo-status-badge" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-bg-input border border-border text-text-muted transition-all duration-500">
+              Ready
+            </div>
+          </div>
+
+          <!-- Main area: 3-column layout -->
+          <div class="flex h-[520px] md:h-[620px]">
+
+            <!-- Left: Image drop panel -->
+            <div class="w-1/2 border-r border-border flex flex-col">
+              <div class="px-3 py-2 border-b border-border flex items-center gap-2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <span class="text-xs text-text-muted font-medium">Reference Image</span>
+              </div>
+
+              <div class="flex-1 relative flex items-center justify-center p-4 overflow-hidden">
+                <!-- Drop zone (shown when no image) -->
+                <div id="demo-dropzone" class="absolute inset-4 border-2 border-dashed border-border-light rounded-xl flex flex-col items-center justify-center gap-3 transition-all duration-700">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <div class="text-center">
+                    <div class="text-sm font-semibold text-text-secondary">Drop image here</div>
+                    <div class="text-xs text-text-muted mt-1">PNG, JPG, WEBP</div>
+                  </div>
+                  <!-- Animated "dragging" cursor -->
+                  <div id="demo-cursor" class="absolute opacity-0 pointer-events-none transition-all duration-500" style="top:20%;left:30%">
+                    <div class="flex items-end gap-1">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="#1a1a2e" stroke-width="1"><path d="M4 0 L4 17 L8 13 L11 20 L13 19 L10 12 L15 12 Z"/></svg>
+                      <div class="bg-bg-elevated border border-border-light rounded px-2 py-1 text-xs text-text-secondary shadow">phoneholder.webp</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Image preview (hidden until phase 2) -->
+                <div id="demo-image-container" class="absolute inset-4 rounded-xl overflow-hidden opacity-0 transition-all duration-700 scale-75" style="transform-origin:center">
+                  <img src="phoneholder.webp" alt="Reference: aluminium phone stand" class="w-full h-full object-contain bg-bg-input" />
+                  <!-- Scan line overlay -->
+                  <div id="demo-scanline" class="absolute inset-0 pointer-events-none opacity-0">
+                    <div id="demo-scan-bar" class="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-accent-cyan to-transparent" style="top:0%;box-shadow:0 0 12px rgba(6,182,212,0.8);transition:top 0s"></div>
+                    <div class="absolute inset-0" style="background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(6,182,212,0.03) 3px,rgba(6,182,212,0.03) 4px)"></div>
+                  </div>
+                  <!-- Corner scan brackets -->
+                  <div id="demo-brackets" class="absolute inset-0 opacity-0 pointer-events-none transition-opacity duration-300">
+                    <div class="absolute top-2 left-2 w-5 h-5 border-t-2 border-l-2 border-accent-cyan rounded-tl"></div>
+                    <div class="absolute top-2 right-2 w-5 h-5 border-t-2 border-r-2 border-accent-cyan rounded-tr"></div>
+                    <div class="absolute bottom-2 left-2 w-5 h-5 border-b-2 border-l-2 border-accent-cyan rounded-bl"></div>
+                    <div class="absolute bottom-2 right-2 w-5 h-5 border-b-2 border-r-2 border-accent-cyan rounded-br"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Analysis log panel -->
+              <div id="demo-log" class="border-t border-border px-3 py-2 h-20 overflow-hidden font-mono text-xs space-y-0.5">
+                <div class="text-text-muted opacity-50">// waiting for input...</div>
+              </div>
+            </div>
+
+            <!-- Right: 3D Viewport -->
+            <div class="flex-1 flex flex-col">
+              <div class="px-3 py-2 border-b border-border flex items-center gap-2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                <span class="text-xs text-text-muted font-medium">3D Viewport</span>
+                <div class="flex-1"></div>
+                <div id="demo-progress-wrap" class="hidden items-center gap-2">
+                  <div class="w-24 h-1.5 bg-bg-input rounded-full overflow-hidden">
+                    <div id="demo-progress-bar" class="h-full bg-gradient-to-r from-accent-blue to-accent-indigo rounded-full transition-all duration-200" style="width:0%"></div>
+                  </div>
+                  <span id="demo-progress-pct" class="text-xs text-accent-blue font-semibold w-8">0%</span>
+                </div>
+              </div>
+
+              <!-- 3D canvas area -->
+              <div class="flex-1 relative flex items-center justify-center overflow-hidden min-h-0" style="background:radial-gradient(ellipse at center, #16213e 0%, #0f1020 100%)">
+                <!-- Grid floor -->
+                <svg class="absolute inset-0 w-full h-full opacity-20" preserveAspectRatio="xMidYMid slice">
+                  <defs>
+                    <pattern id="grid3d" width="30" height="30" patternUnits="userSpaceOnUse">
+                      <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#3b82f6" stroke-width="0.5"/>
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid3d)"/>
+                </svg>
+
+                <!-- 3D Axis gizmo -->
+                <div class="absolute bottom-2 left-2">
+                  <svg width="64" height="58" viewBox="0 0 64 58" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      <marker id="gz-y" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+                        <polygon points="0,0 0,7 6,3.5" fill="#22c55e"/>
+                      </marker>
+                      <marker id="gz-x" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+                        <polygon points="0,0 0,7 6,3.5" fill="#ef4444"/>
+                      </marker>
+                      <marker id="gz-z" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+                        <polygon points="0,0 0,7 6,3.5" fill="#5b8dd9"/>
+                      </marker>
+                    </defs>
+                    <!-- Z axis (blue-ish, lower-left) — drawn first so Y stays on top -->
+                    <line x1="28" y1="34" x2="10" y2="45" stroke="#5b8dd9" stroke-width="1.8" stroke-linecap="round" marker-end="url(#gz-z)"/>
+                    <text x="4" y="57" fill="#5b8dd9" font-size="9" font-family="Inter,sans-serif" font-weight="700">Z</text>
+                    <!-- X axis (red, lower-right) -->
+                    <line x1="28" y1="34" x2="47" y2="45" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" marker-end="url(#gz-x)"/>
+                    <text x="54" y="57" fill="#ef4444" font-size="9" font-family="Inter,sans-serif" font-weight="700" text-anchor="middle">X</text>
+                    <!-- Y axis (green, straight up) — drawn last, on top -->
+                    <line x1="28" y1="34" x2="28" y2="13" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" marker-end="url(#gz-y)"/>
+                    <text x="28" y="8" fill="#22c55e" font-size="9" font-family="Inter,sans-serif" font-weight="700" text-anchor="middle">Y</text>
+                    <!-- Origin -->
+                    <circle cx="28" cy="34" r="2.5" fill="#94a3b8" opacity="0.7"/>
+                  </svg>
+                </div>
+
+                <!-- Editing toolbar (left side) -->
+                <div class="absolute left-2 top-1/2 z-10" style="transform:translateY(-50%)">
+                  <div class="flex flex-col gap-0.5 p-1 rounded-xl border border-border" style="background:rgba(15,16,32,0.82);backdrop-filter:blur(6px)">
+
+                    <!-- Group 1: Selection & Transform -->
+                    <button class="tool-btn active" id="tool-select" data-tip="Select" onclick="activateTool(this)">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M2 1 L2 11 L5 8.5 L7 13 L8.5 12.5 L6.5 7.5 L10 7.5 Z" fill="currentColor"/>
+                      </svg>
+                    </button>
+                    <button class="tool-btn" id="tool-move" data-tip="Move" onclick="activateTool(this)">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+                        <line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/>
+                        <polyline points="5,3 7,1 9,3"/><polyline points="5,11 7,13 9,11"/>
+                        <polyline points="3,5 1,7 3,9"/><polyline points="11,5 13,7 11,9"/>
+                      </svg>
+                    </button>
+                    <button class="tool-btn" id="tool-rotate" data-tip="Rotate" onclick="activateTool(this)">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+                        <path d="M11.5 4A5 5 0 1 0 12 7"/>
+                        <polyline points="12,1 12,4 9,4"/>
+                      </svg>
+                    </button>
+                    <button class="tool-btn" id="tool-scale" data-tip="Scale" onclick="activateTool(this)">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+                        <polyline points="1,5 1,1 5,1"/><line x1="1" y1="1" x2="6" y2="6"/>
+                        <polyline points="13,9 13,13 9,13"/><line x1="13" y1="13" x2="8" y2="8"/>
+                      </svg>
+                    </button>
+
+                    <div class="tool-divider"></div>
+
+                    <!-- Group 2: Modeling ops -->
+                    <button class="tool-btn" id="tool-extrude" data-tip="Extrude" onclick="activateTool(this)">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="7" width="10" height="5" rx="0.5"/>
+                        <line x1="7" y1="7" x2="7" y2="2"/>
+                        <polyline points="5,4 7,2 9,4"/>
+                      </svg>
+                    </button>
+                    <button class="tool-btn" id="tool-fillet" data-tip="Fillet" onclick="activateTool(this)">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+                        <path d="M2 2 L2 10 Q2 12 4 12 L12 12"/>
+                        <path d="M2 6 Q2 2 6 2" stroke-dasharray="2,1.5" opacity="0.5"/>
+                      </svg>
+                    </button>
+                    <button class="tool-btn" id="tool-shell" data-tip="Shell" onclick="activateTool(this)">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="1.5" y="1.5" width="11" height="11" rx="1"/>
+                        <rect x="4" y="4" width="6" height="6" rx="0.5" stroke-dasharray="2,1.5"/>
+                      </svg>
+                    </button>
+
+                    <div class="tool-divider"></div>
+
+                    <!-- Group 3: Utilities -->
+                    <button class="tool-btn" id="tool-measure" data-tip="Measure" onclick="activateTool(this)">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+                        <line x1="1" y1="4" x2="13" y2="4"/>
+                        <line x1="1" y1="4" x2="1" y2="6.5"/><line x1="13" y1="4" x2="13" y2="6.5"/>
+                        <line x1="4" y1="4" x2="4" y2="5.5"/><line x1="7" y1="4" x2="7" y2="6"/><line x1="10" y1="4" x2="10" y2="5.5"/>
+                        <line x1="3" y1="9" x2="11" y2="9" stroke-dasharray="2,1.5"/>
+                        <text x="7" y="13" fill="currentColor" font-size="4.5" text-anchor="middle" stroke="none" font-family="monospace">mm</text>
+                      </svg>
+                    </button>
+                    <button class="tool-btn" id="tool-section" data-tip="Section View" onclick="activateTool(this)">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="1.5" y="1.5" width="11" height="11" rx="1" opacity="0.5"/>
+                        <line x1="1.5" y1="7" x2="12.5" y2="7" stroke-dasharray="2,1"/>
+                        <path d="M1.5 7 L1.5 12.5 L12.5 12.5 L12.5 7" fill="rgba(59,130,246,0.15)" stroke-width="0"/>
+                        <path d="M1.5 7 L1.5 12.5 L12.5 12.5 L12.5 7" stroke-width="1.3" fill="none"/>
+                      </svg>
+                    </button>
+
+                  </div>
+                </div>
+
+                <!-- CAD solid model — phone stand (parts fade in) -->
+                <svg id="demo-cad-svg" viewBox="0 0 420 360" width="420" height="360" class="opacity-0 transition-opacity duration-500" style="max-width:100%;max-height:100%">
+                  <defs>
+                    <filter id="f-shadow" x="-10%" y="-10%" width="130%" height="140%">
+                      <feDropShadow dx="3" dy="5" stdDeviation="5" flood-color="rgba(0,0,0,0.35)"/>
+                    </filter>
+                  </defs>
+
+                  <!-- ── BASE PLATE ── -->
+                  <!-- Top face — lit, lightest -->
+                  <polygon id="cw-base-top"
+                    points="100,288 308,288 322,270 114,270"
+                    fill="#c2d8e8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part" filter="url(#f-shadow)"/>
+                  <!-- Front face — medium -->
+                  <polygon id="cw-base-front"
+                    points="100,288 308,288 308,303 100,303"
+                    fill="#8ab4c8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Right side face — darkest -->
+                  <polygon id="cw-base-right"
+                    points="308,288 322,270 322,285 308,303"
+                    fill="#618ea8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Gold edge highlight on top-front edge -->
+                  <line id="cw-base-edge"
+                    x1="100" y1="288" x2="308" y2="288"
+                    stroke="#d0aa3a" stroke-width="1.8" stroke-linecap="round"
+                    style="opacity:0" class="cad-part"/>
+
+                  <!-- ── VERTICAL BRACE (left member) ── -->
+                  <!-- Front face — medium -->
+                  <polygon id="cw-brace-front"
+                    points="150,48 166,52 122,272 106,268"
+                    fill="#8ab4c8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Side face (depth) — dark -->
+                  <polygon id="cw-brace-side"
+                    points="166,52 178,42 134,262 122,272"
+                    fill="#618ea8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Gold edge on left-lit edge of brace -->
+                  <line id="cw-brace-edge"
+                    x1="150" y1="48" x2="106" y2="268"
+                    stroke="#d0aa3a" stroke-width="1.6" stroke-linecap="round"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Fastener bolt detail at brace mid-point -->
+                  <circle id="cw-brace-bolt"
+                    cx="136" cy="160" r="5.5"
+                    fill="#8ab4c8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <circle cx="136" cy="160" r="2.5"
+                    fill="#c2d8e8" stroke="#2a4560" stroke-width="0.7"
+                    id="cw-brace-bolt-inner" style="opacity:0" class="cad-part"/>
+
+                  <!-- ── DIAGONAL MAIN ARM ── -->
+                  <!-- Front/left face — medium (main visible face) -->
+                  <polygon id="cw-arm-front"
+                    points="150,55 166,45 316,277 300,287"
+                    fill="#8ab4c8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Top face — lightest (faces upward) -->
+                  <polygon id="cw-arm-top"
+                    points="166,45 178,35 328,267 316,277"
+                    fill="#c2d8e8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Gold edge along top-lit edge of arm -->
+                  <polyline id="cw-arm-edge"
+                    points="166,45 178,35 328,267"
+                    fill="none" stroke="#d0aa3a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                    style="opacity:0" class="cad-part"/>
+
+                  <!-- ── HINGE RING (top, where brace meets arm) ── -->
+                  <circle id="cw-hinge"
+                    cx="162" cy="48" r="16"
+                    fill="#7aacbf" stroke="#2a4560" stroke-width="1.5"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Inner ring detail -->
+                  <circle id="cw-hinge-inner"
+                    cx="162" cy="48" r="7"
+                    fill="#618ea8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Centre bolt -->
+                  <circle id="cw-hinge-bolt"
+                    cx="162" cy="48" r="3"
+                    fill="#c2d8e8" stroke="#2a4560" stroke-width="0.8"
+                    style="opacity:0" class="cad-part"/>
+
+                  <!-- ── PHONE CRADLE (horizontal ledge at base of arm) ── -->
+                  <!-- Top face — light -->
+                  <polygon id="cw-cradle-top"
+                    points="314,275 395,275 409,257 328,257"
+                    fill="#c2d8e8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Front face — medium -->
+                  <polygon id="cw-cradle-front"
+                    points="298,286 395,286 395,301 298,301"
+                    fill="#8ab4c8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Right face — dark -->
+                  <polygon id="cw-cradle-right"
+                    points="395,286 409,268 409,283 395,301"
+                    fill="#618ea8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Gold edge on cradle top-front -->
+                  <line id="cw-cradle-edge"
+                    x1="298" y1="286" x2="395" y2="286"
+                    stroke="#d0aa3a" stroke-width="1.6" stroke-linecap="round"
+                    style="opacity:0" class="cad-part"/>
+
+                  <!-- ── PHONE HOLDER PRONGS ── -->
+                  <!-- Left prong front face -->
+                  <polygon id="cw-prong-l-front"
+                    points="308,301 322,301 322,316 308,316"
+                    fill="#8ab4c8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Left prong side face -->
+                  <polygon id="cw-prong-l-side"
+                    points="322,301 330,295 330,310 322,316"
+                    fill="#618ea8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Right prong front face -->
+                  <polygon id="cw-prong-r-front"
+                    points="368,301 382,301 382,316 368,316"
+                    fill="#8ab4c8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <!-- Right prong side face -->
+                  <polygon id="cw-prong-r-side"
+                    points="382,301 390,295 390,310 382,316"
+                    fill="#618ea8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+
+                  <!-- ── WIDE-BRACE VARIANTS (Phase 8, hidden until update) ── -->
+                  <polygon id="cw-brace-front-wide"
+                    points="142,48 174,52 130,272 98,268"
+                    fill="#8ab4c8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <polygon id="cw-brace-side-wide"
+                    points="174,52 186,42 142,262 130,272"
+                    fill="#618ea8" stroke="#2a4560" stroke-width="1"
+                    style="opacity:0" class="cad-part"/>
+                  <line id="cw-brace-edge-wide"
+                    x1="142" y1="48" x2="98" y2="268"
+                    stroke="#d0aa3a" stroke-width="1.6" stroke-linecap="round"
+                    style="opacity:0" class="cad-part"/>
+
+                  <!-- ── INTERACTION OVERLAYS (Phase 5) ── -->
+                  <!-- Selection highlight around brace -->
+                  <polygon id="cw-brace-select"
+                    points="147,44 170,50 126,274 102,268"
+                    fill="rgba(6,182,212,0.10)" stroke="#06b6d4" stroke-width="2.2"
+                    style="opacity:0"/>
+                  <!-- Click ripple -->
+                  <circle id="cw-click-ripple" cx="136" cy="160" r="5"
+                    fill="none" stroke="#06b6d4" stroke-width="2"
+                    style="opacity:0"/>
+                  <!-- Viewport cursor pointer -->
+                  <g id="cw-vp-cursor" style="opacity:0;transform:translate(295px,95px);transition:transform 0.75s ease,opacity 0.3s ease">
+                    <path d="M0 0 L0 15 L3.5 11 L6 17.5 L7.8 16.5 L5.3 10 L10 10 Z"
+                      fill="white" stroke="#0a0a18" stroke-width="0.9"/>
+                  </g>
+
+                  <!-- ── DIMENSION ANNOTATIONS (appear last) ── -->
+                  <g id="cw-dims" opacity="0">
+                    <line x1="100" y1="318" x2="308" y2="318" stroke="rgba(148,163,184,0.5)" stroke-width="0.8" stroke-dasharray="4,3"/>
+                    <line x1="100" y1="315" x2="100" y2="321" stroke="rgba(148,163,184,0.6)" stroke-width="0.8"/>
+                    <line x1="308" y1="315" x2="308" y2="321" stroke="rgba(148,163,184,0.6)" stroke-width="0.8"/>
+                    <text x="204" y="331" fill="rgba(148,163,184,0.75)" font-size="8" font-family="'JetBrains Mono',monospace" text-anchor="middle">base_w: 210 mm</text>
+                    <line x1="348" y1="48" x2="348" y2="303" stroke="rgba(148,163,184,0.5)" stroke-width="0.8" stroke-dasharray="4,3"/>
+                    <line x1="345" y1="48"  x2="351" y2="48"  stroke="rgba(148,163,184,0.6)" stroke-width="0.8"/>
+                    <line x1="345" y1="303" x2="351" y2="303" stroke="rgba(148,163,184,0.6)" stroke-width="0.8"/>
+                    <text x="360" y="180" fill="rgba(148,163,184,0.75)" font-size="8" font-family="'JetBrains Mono',monospace">h: 180mm</text>
+                    <text x="62" y="44" fill="rgba(208,170,58,0.75)" font-size="8" font-family="'JetBrains Mono',monospace">phone_stand_v1</text>
+                    <text x="62" y="55" fill="rgba(208,170,58,0.5)"  font-size="7" font-family="'JetBrains Mono',monospace">mat: Al 6061-T6</text>
+                  </g>
+
+                </svg>
+
+                <!-- "Model Ready" badge -->
+                <div id="demo-ready-badge" class="absolute top-4 right-4 opacity-0 transition-all duration-500 scale-90" style="transform-origin:top right">
+                  <div class="flex items-center gap-1.5 bg-green-500/15 border border-green-500/40 rounded-lg px-3 py-1.5">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span class="text-xs font-semibold text-green-400">Model Ready</span>
+                  </div>
+                </div>
+
+                <!-- Idle overlay -->
+                <div id="demo-idle-overlay" class="absolute inset-0 flex items-center justify-center">
+                  <div class="text-center">
+                    <svg class="mx-auto mb-3 text-text-muted" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                    <div class="text-xs text-text-muted">Awaiting generation...</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ── Chat panel ── -->
+              <div id="demo-chat" class="flex-shrink-0 border-t border-border flex flex-col" style="height:185px;background:#0a0a18">
+                <!-- Chat header -->
+                <div class="px-3 py-1.5 border-b border-border flex items-center gap-2 flex-shrink-0">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  <span class="text-xs text-text-muted font-medium">Agent Chat</span>
+                  <span class="ml-auto text-xs text-text-muted opacity-40">click a part to select it</span>
+                </div>
+                <!-- Messages -->
+                <div id="chat-messages" class="flex-1 overflow-y-auto px-3 py-2 space-y-2" style="scrollbar-width:none"></div>
+                <!-- Input row -->
+                <div class="px-3 py-2 border-t border-border flex items-center gap-2 flex-shrink-0">
+                  <div id="chat-input-display"
+                    class="flex-1 bg-bg-input border border-border-light rounded-lg px-3 py-1.5 text-xs text-text-muted font-mono select-none"
+                    style="min-height:28px">Type a message...</div>
+                  <button class="px-2.5 py-1.5 rounded-lg bg-accent-blue/10 border border-accent-blue/20 text-accent-blue hover:bg-accent-blue/20 transition-colors flex-shrink-0">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  </button>
+                </div>
+              </div>
+
+            </div><!-- end right panel -->
+
+          </div><!-- end main area -->
+
+          <!-- Bottom status bar -->
+          <div class="flex items-center gap-4 px-4 py-2 bg-bg-surface border-t border-border text-xs text-text-muted font-mono">
+            <div id="demo-status-text" class="flex-1">Ready</div>
+            <div>Vertices: <span id="demo-verts" class="text-text-secondary">—</span></div>
+            <div>Faces: <span id="demo-faces" class="text-text-secondary">—</span></div>
+            <div>Export: <span class="text-green-400">STL</span></div>
+          </div>
+
+        </div><!-- end demo-window -->
+
+        <!-- Replay button -->
+        <div class="text-center mt-6">
+          <button id="demo-replay-btn" onclick="runDemo()" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border-light text-sm text-text-secondary font-medium hover:border-accent-blue hover:text-accent-blue transition-all">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+            Replay Demo
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ─── FEATURES ───────────────────────────────────────────── -->
+  <section id="features" class="relative py-28 overflow-hidden">
+    <div class="absolute inset-0 bg-bg-primary"></div>
+    <div class="mesh-bg">
+      <div class="mesh-blob w-72 h-72 bg-accent-indigo" style="bottom:0;right:10%"></div>
+    </div>
+
+    <div class="relative max-w-6xl mx-auto px-6">
+
+      <div class="text-center mb-16 reveal">
+        <div class="text-accent-indigo text-sm font-semibold uppercase tracking-widest mb-3">What It Does</div>
+        <h2 class="text-4xl md:text-5xl font-bold text-text-primary mb-4">Simple Objects, Printable Fast</h2>
+        <p class="text-text-secondary text-lg max-w-xl mx-auto">Best for everyday objects with clear shapes. Upload a photo, get a model you can print.</p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+
+        <!-- Feature: Image to Model -->
+        <div class="reveal card-glow rounded-2xl overflow-hidden" style="transition-delay:0.1s">
+          <div class="bg-bg-surface border border-border rounded-2xl p-7 h-full">
+            <div class="icon-ring w-14 h-14 rounded-xl mb-5 flex items-center justify-center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-bold text-text-primary mb-3">Photo to Printable Model</h3>
+            <p class="text-text-secondary text-sm leading-relaxed">
+              Upload a photo of a simple object. We generate a starting model that captures the shape — something you can refine and print, not a perfect reconstruction.
+            </p>
+            <ul class="mt-4 space-y-2">
+              <li class="flex items-center gap-2 text-sm text-text-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Works best for simple mechanical shapes
+              </li>
+              <li class="flex items-center gap-2 text-sm text-text-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Supports photos and reference images
+              </li>
+              <li class="flex items-center gap-2 text-sm text-text-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                A model you can tweak — not just a scan
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Feature: Prompt Iteration -->
+        <div class="reveal card-glow rounded-2xl overflow-hidden" style="transition-delay:0.2s">
+          <div class="bg-bg-surface border border-border rounded-2xl p-7 h-full">
+            <div class="icon-ring w-14 h-14 rounded-xl mb-5 flex items-center justify-center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-bold text-text-primary mb-3">Refine with Plain Language</h3>
+            <p class="text-text-secondary text-sm leading-relaxed">
+              Describe what to change in plain English. No CAD knowledge needed — just say what you want and the model updates.
+            </p>
+            <!-- Example prompts -->
+            <div class="mt-4 space-y-2">
+              <div class="bg-bg-input border border-border-light rounded-lg px-3 py-2 text-xs text-text-secondary font-mono">"make it 20% taller"</div>
+              <div class="bg-bg-input border border-border-light rounded-lg px-3 py-2 text-xs text-text-secondary font-mono">"add a hole for an M4 bolt"</div>
+              <div class="bg-bg-input border border-border-light rounded-lg px-3 py-2 text-xs text-text-secondary font-mono">"round all edges by 2mm"</div>
+              <div class="bg-bg-input border border-border-light rounded-lg px-3 py-2 text-xs text-text-secondary font-mono">"mirror this on the Y axis"</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature: Use Cases -->
+        <div class="reveal card-glow rounded-2xl overflow-hidden" style="transition-delay:0.3s">
+          <div class="bg-bg-surface border border-border rounded-2xl p-7 h-full">
+            <div class="icon-ring w-14 h-14 rounded-xl mb-5 flex items-center justify-center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-bold text-text-primary mb-3">What You Can Make</h3>
+            <p class="text-text-secondary text-sm leading-relaxed mb-5">
+              Designed for simple, functional objects. If you can photograph it, we can generate a model for it.
+            </p>
+            <div class="space-y-3">
+              <div class="flex items-center gap-3 bg-bg-input border border-border-light rounded-xl px-4 py-3">
+                <span class="text-lg">📱</span>
+                <div>
+                  <div class="text-sm font-semibold text-text-primary">Phone &amp; tablet stands</div>
+                  <div class="text-xs text-text-muted">Desk holders, adjustable cradles</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 bg-bg-input border border-border-light rounded-xl px-4 py-3">
+                <span class="text-lg">🪝</span>
+                <div>
+                  <div class="text-sm font-semibold text-text-primary">Wall hooks &amp; brackets</div>
+                  <div class="text-xs text-text-muted">Cable organizers, mounting clips</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 bg-bg-input border border-border-light rounded-xl px-4 py-3">
+                <span class="text-lg">🔧</span>
+                <div>
+                  <div class="text-sm font-semibold text-text-primary">Custom holders &amp; jigs</div>
+                  <div class="text-xs text-text-muted">Tool holders, sensor mounts</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Secondary feature row -->
+      <div class="grid md:grid-cols-2 gap-6 mt-6">
+
+        <!-- Feature: Export -->
+        <div class="reveal card-glow rounded-2xl overflow-hidden" style="transition-delay:0.4s">
+          <div class="bg-bg-surface border border-border rounded-2xl p-7">
+            <div class="flex items-start gap-5">
+              <div class="icon-ring w-14 h-14 rounded-xl flex-shrink-0 flex items-center justify-center">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-lg font-bold text-text-primary mb-2">Send Straight to Your Printer</h3>
+                <p class="text-text-secondary text-sm leading-relaxed">Export as STL or STEP and open directly in your slicer. Works with standard FDM printers out of the box.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature: In-browser -->
+        <div class="reveal card-glow rounded-2xl overflow-hidden" style="transition-delay:0.5s">
+          <div class="bg-bg-surface border border-border rounded-2xl p-7">
+            <div class="flex items-start gap-5">
+              <div class="icon-ring w-14 h-14 rounded-xl flex-shrink-0 flex items-center justify-center">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-lg font-bold text-text-primary mb-2">No Software to Install</h3>
+                <p class="text-text-secondary text-sm leading-relaxed">Everything runs in the browser. Upload your image, get your model, export it — no account required to try.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ─── EMAIL WAITLIST ─────────────────────────────────────── -->
+  <section id="waitlist" class="relative py-28 overflow-hidden">
+    <div class="absolute inset-0 bg-bg-primary"></div>
+    <div class="mesh-bg">
+      <div class="mesh-blob w-96 h-96 bg-accent-blue"   style="top:-20%;left:50%;transform:translateX(-50%)"></div>
+    </div>
+
+    <div class="relative max-w-2xl mx-auto px-6 text-center">
+      <div class="reveal">
+        <div class="text-accent-blue text-sm font-semibold uppercase tracking-widest mb-4">Coming Soon</div>
+        <h2 class="text-4xl md:text-5xl font-bold text-text-primary mb-4">
+          Turn Images Into CAD Models
+        </h2>
+        <p class="text-text-secondary text-lg mb-10">
+          We're building a tool that converts reference images into editable CAD models.<br/>
+          Join the waitlist to get early access when it's ready.
+        </p>
+
+        <!-- Email form -->
+        <div class="max-w-lg mx-auto mb-4">
+          <form id="waitlist-form" class="flex flex-col sm:flex-row gap-3"
+                action="https://formspree.io/f/YOUR_FORM_ID"
+                method="POST"
+                onsubmit="handleSubmit(event)">
+            <input
+              type="email"
+              name="email"
+              id="email-input"
+              placeholder="Enter your email"
+              required
+              class="email-input flex-1 bg-bg-input border border-border-light text-text-primary placeholder-text-muted rounded-xl px-5 py-4 text-sm font-medium transition-all"
+            />
+            <button type="submit"
+              class="btn-primary px-6 py-4 rounded-xl text-sm font-bold text-white whitespace-nowrap shadow-xl">
+              Join the Waitlist
+            </button>
+          </form>
+          <p class="text-text-muted text-xs mt-3">
+            <svg class="inline mr-1" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            No spam. Unsubscribe anytime.
+          </p>
+        </div>
+
+        <!-- Thank you message (hidden by default) -->
+        <div id="thank-you" class="hidden bg-green-500/10 border border-green-500/30 text-green-400 rounded-2xl px-6 py-6 text-sm font-medium max-w-lg mx-auto">
+          <svg class="inline mr-2" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          You're on the list! We'll reach out when early access opens.
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ─── FOOTER ─────────────────────────────────────────────── -->
+  <footer class="bg-bg-secondary border-t border-border py-10">
+    <div class="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+
+      <div class="flex items-center gap-2.5">
+        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-blue to-accent-indigo flex items-center justify-center">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <span class="font-bold text-text-primary">CAD Agent</span>
+        <span class="text-text-muted text-sm">— Image to 3D Print</span>
+      </div>
+
+      <div class="text-text-muted text-sm">
+        &copy; 2026 CAD Agent. Built to make making easier.
+      </div>
+
+    </div>
+  </footer>
+
+
+  <!-- ─── SCRIPTS ─────────────────────────────────────────────── -->
+  <script>
+    // Scroll-triggered reveal animations
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('visible'); }
+      }),
+      { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
+    );
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // ── DEMO ANIMATION ──────────────────────────────────────────
+    // CAD wire elements in draw order, each with their dasharray length
+    const wireElements = [
+      // Base plate — built first
+      'cw-base-top','cw-base-front','cw-base-right','cw-base-edge',
+      // Vertical brace
+      'cw-brace-front','cw-brace-side','cw-brace-edge','cw-brace-bolt','cw-brace-bolt-inner',
+      // Diagonal arm
+      'cw-arm-front','cw-arm-top','cw-arm-edge',
+      // Hinge ring
+      'cw-hinge','cw-hinge-inner','cw-hinge-bolt',
+      // Cradle ledge
+      'cw-cradle-top','cw-cradle-front','cw-cradle-right','cw-cradle-edge',
+      // Phone prongs
+      'cw-prong-l-front','cw-prong-l-side','cw-prong-r-front','cw-prong-r-side',
+    ];
+
+    let demoRunning = false;
+    let demoTimeout = null;
+
+    function setStatus(text, color) {
+      const el = document.getElementById('demo-status-text');
+      el.textContent = text;
+      el.style.color = color || '';
+    }
+
+    function setBadge(text, cls) {
+      const b = document.getElementById('demo-status-badge');
+      b.textContent = text;
+      b.className = 'px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-500 ' + cls;
+    }
+
+    function appendLog(msg, color) {
+      const log = document.getElementById('demo-log');
+      const line = document.createElement('div');
+      line.textContent = msg;
+      line.style.color = color || '#94a3b8';
+      line.style.opacity = '0';
+      line.style.transition = 'opacity 0.3s';
+      log.appendChild(line);
+      requestAnimationFrame(() => { line.style.opacity = '1'; });
+      // Keep last 4 lines
+      while (log.children.length > 4) log.removeChild(log.firstChild);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function setProgress(pct) {
+      document.getElementById('demo-progress-bar').style.width = pct + '%';
+      document.getElementById('demo-progress-pct').textContent = pct + '%';
+    }
+
+    function resetWires() {
+      wireElements.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.transition = 'none';
+        el.style.opacity = '0';
+      });
+      document.getElementById('cw-dims').style.opacity = '0';
+      document.getElementById('cw-dims').style.transition = 'none';
+      // Reset Phase 5+ overlays
+      const overlayIds = [
+        'cw-brace-select','cw-brace-front-wide','cw-brace-side-wide','cw-brace-edge-wide',
+        'cw-click-ripple','cw-vp-cursor'
+      ];
+      overlayIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.transition = 'none';
+        el.style.opacity = '0';
+      });
+      const vc = document.getElementById('cw-vp-cursor');
+      if (vc) vc.style.transform = 'translate(295px,95px)';
+      const rpl = document.getElementById('cw-click-ripple');
+      if (rpl) rpl.setAttribute('r', '5');
+    }
+
+    // ── Chat helpers ──────────────────────────────────────────────
+    function addChatMsg(text, role) {
+      const container = document.getElementById('chat-messages');
+      const wrap = document.createElement('div');
+      wrap.className = 'flex items-end gap-1.5 ' + (role === 'user' ? 'flex-row-reverse' : '');
+      const bubble = document.createElement('div');
+      bubble.className = role === 'user'
+        ? 'text-xs rounded-xl px-2.5 py-1.5 max-w-xs leading-relaxed'
+        : 'text-xs rounded-xl px-2.5 py-1.5 max-w-xs leading-relaxed';
+      bubble.style.cssText = role === 'user'
+        ? 'background:rgba(59,130,246,0.22);border:1px solid rgba(59,130,246,0.35);color:#e2e8f0'
+        : 'background:#12122a;border:1px solid #2a2a50;color:#94a3b8';
+      bubble.textContent = text;
+      wrap.appendChild(bubble);
+      container.appendChild(wrap);
+      container.scrollTop = container.scrollHeight;
+      return bubble;
+    }
+
+    function showTypingIndicator() {
+      const container = document.getElementById('chat-messages');
+      const wrap = document.createElement('div');
+      wrap.id = 'chat-typing-indicator';
+      wrap.className = 'flex items-end gap-1.5';
+      wrap.innerHTML = '<div style="background:#12122a;border:1px solid #2a2a50;border-radius:12px;padding:8px 12px;display:flex;gap:4px;align-items:center"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+      container.appendChild(wrap);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+      const el = document.getElementById('chat-typing-indicator');
+      if (el) el.remove();
+    }
+
+    async function animateRipple() {
+      const ripple = document.getElementById('cw-click-ripple');
+      ripple.setAttribute('r', '5');
+      ripple.style.opacity = '1';
+      return new Promise(resolve => {
+        let r = 5;
+        function frame() {
+          r += 1.6;
+          ripple.setAttribute('r', r);
+          ripple.style.opacity = String(Math.max(0, 1 - (r - 5) / 32));
+          if (r < 40) requestAnimationFrame(frame);
+          else { ripple.style.opacity = '0'; resolve(); }
+        }
+        requestAnimationFrame(frame);
+      });
+    }
+
+    async function runDemo() {
+      if (demoRunning) return;
+      demoRunning = true;
+
+      // Reset everything
+      clearTimeout(demoTimeout);
+      const dropzone        = document.getElementById('demo-dropzone');
+      const imgContainer    = document.getElementById('demo-image-container');
+      const scanline        = document.getElementById('demo-scanline');
+      const scanBar         = document.getElementById('demo-scan-bar');
+      const brackets        = document.getElementById('demo-brackets');
+      const cursor          = document.getElementById('demo-cursor');
+      const cadSvg          = document.getElementById('demo-cad-svg');
+      const idleOverlay     = document.getElementById('demo-idle-overlay');
+      const readyBadge      = document.getElementById('demo-ready-badge');
+      const progressWrap    = document.getElementById('demo-progress-wrap');
+      const replayBtn       = document.getElementById('demo-replay-btn');
+
+      replayBtn.disabled = true;
+      replayBtn.style.opacity = '0.4';
+
+      // Full reset
+      dropzone.style.opacity = '1';
+      dropzone.style.borderColor = '';
+      imgContainer.style.opacity = '0';
+      imgContainer.style.transform = 'scale(0.75)';
+      scanline.style.opacity = '0';
+      brackets.style.opacity = '0';
+      cursor.style.opacity = '0';
+      cadSvg.style.opacity = '0';
+      idleOverlay.style.opacity = '1';
+      readyBadge.style.opacity = '0';
+      readyBadge.style.transform = 'scale(0.9)';
+      progressWrap.classList.add('hidden');
+      progressWrap.classList.remove('flex');
+      document.getElementById('demo-verts').textContent = '—';
+      document.getElementById('demo-faces').textContent = '—';
+      document.getElementById('demo-log').innerHTML = '<div style="color:#64748b;opacity:0.5">// waiting for input...</div>';
+      document.getElementById('chat-messages').innerHTML = '';
+      document.getElementById('chat-input-display').textContent = 'Type a message...';
+      document.getElementById('chat-input-display').style.color = '';
+      resetWires();
+      setStatus('Ready');
+      setBadge('Ready', 'bg-bg-input border border-border text-text-muted');
+      setProgress(0);
+
+      const T = (ms) => new Promise(r => { demoTimeout = setTimeout(r, ms); });
+
+      // PHASE 1: Cursor appears and drags image in
+      await T(600);
+      setBadge('Uploading…', 'bg-blue-500/10 border border-blue-500/30 text-accent-blue');
+      setStatus('Receiving image...');
+
+      // Animate cursor moving into the drop zone
+      cursor.style.opacity = '1';
+      cursor.style.top = '10%';
+      cursor.style.left = '20%';
+      await T(200);
+      cursor.style.transition = 'top 0.6s ease, left 0.6s ease';
+      cursor.style.top = '45%';
+      cursor.style.left = '45%';
+      dropzone.style.borderColor = '#3b82f6';
+      dropzone.style.background = 'rgba(59,130,246,0.05)';
+      await T(700);
+
+      // Image drops in
+      cursor.style.opacity = '0';
+      dropzone.style.opacity = '0';
+      imgContainer.style.transition = 'opacity 0.5s, transform 0.5s';
+      imgContainer.style.opacity = '1';
+      imgContainer.style.transform = 'scale(1)';
+      appendLog('▸ image received: phoneholder.webp (600×600)', '#94a3b8');
+      await T(600);
+
+      // PHASE 2: Scanning
+      setBadge('Scanning…', 'bg-cyan-500/10 border border-cyan-500/30 text-accent-cyan');
+      setStatus('Analyzing image structure...');
+      progressWrap.classList.remove('hidden');
+      progressWrap.classList.add('flex');
+      brackets.style.opacity = '1';
+      scanline.style.opacity = '1';
+
+      appendLog('▸ detecting geometry & silhouette...', '#06b6d4');
+      let prog = 0;
+      const scanDuration = 2200;
+      const scanStart = Date.now();
+      await new Promise(resolve => {
+        function scanFrame() {
+          const elapsed = Date.now() - scanStart;
+          const t = Math.min(elapsed / scanDuration, 1);
+          const pct = Math.round(t * 100);
+          const scanY = Math.round(t * 98);
+          scanBar.style.transition = 'top 0.05s linear';
+          scanBar.style.top = scanY + '%';
+          setProgress(pct);
+          if (pct > 20 && prog < 20) { appendLog('▸ flat base plate detected', '#94a3b8'); prog = 20; }
+          if (pct > 55 && prog < 55) { appendLog('▸ folding arm & hinge joints mapped', '#94a3b8'); prog = 55; }
+          if (pct > 80 && prog < 80) { appendLog('▸ tray cradle & slot features identified', '#94a3b8'); prog = 80; }
+          if (t < 1) requestAnimationFrame(scanFrame);
+          else resolve();
+        }
+        scanFrame();
+      });
+
+      setProgress(100);
+      await T(300);
+      scanline.style.opacity = '0';
+
+      // PHASE 3: Generating CAD wireframe
+      setBadge('Generating…', 'bg-indigo-500/10 border border-indigo-500/30 text-accent-indigo');
+      setStatus('Building solid geometry...');
+      appendLog('▸ generating CAD instructions...', '#6366f1');
+      cadSvg.style.opacity = '1';
+      idleOverlay.style.opacity = '0';
+
+      let verts = 0, faces = 0;
+      const step = 60;
+
+      for (let i = 0; i < wireElements.length; i++) {
+        const id = wireElements[i];
+        await T(step);
+        const el = document.getElementById(id);
+        if (el) {
+          el.style.transition = 'opacity 0.3s ease';
+          el.style.opacity = '1';
+        }
+        verts += Math.floor(Math.random() * 8) + 2;
+        faces += Math.floor(Math.random() * 4) + 1;
+        document.getElementById('demo-verts').textContent = verts;
+        document.getElementById('demo-faces').textContent = faces;
+      }
+
+      await T(400);
+
+      // Dimension annotations fade in
+      const dims = document.getElementById('cw-dims');
+      dims.style.transition = 'opacity 0.6s';
+      dims.style.opacity = '1';
+      appendLog('✓ model complete — 3D print ready', '#22c55e');
+
+      // PHASE 4: Model complete
+      await T(300);
+      setBadge('✓ Complete', 'bg-green-500/10 border border-green-500/30 text-green-400');
+      setStatus('Model generated successfully');
+      readyBadge.style.transition = 'opacity 0.5s, transform 0.5s';
+      readyBadge.style.opacity = '1';
+      readyBadge.style.transform = 'scale(1)';
+
+      // PHASE 5: User clicks the brace part
+      await T(1800);
+      const vpCursor    = document.getElementById('cw-vp-cursor');
+      const braceSelect = document.getElementById('cw-brace-select');
+      const chatInput   = document.getElementById('chat-input-display');
+
+      // Cursor appears at top-right of viewport, moves to brace centre
+      vpCursor.style.transition = 'none';
+      vpCursor.style.opacity = '1';
+      await T(50);
+      vpCursor.style.transition = 'transform 0.75s ease, opacity 0.3s ease';
+      vpCursor.style.transform = 'translate(128px, 154px)';
+      await T(850);
+
+      // Click: ripple, then selection highlight
+      animateRipple();
+      await T(120);
+      braceSelect.style.transition = 'opacity 0.25s';
+      braceSelect.style.opacity = '1';
+      vpCursor.style.opacity = '0';
+      // Flash Select tool to show it's active for the click
+      const selectBtn = document.getElementById('tool-select');
+      if (selectBtn) {
+        selectBtn.classList.add('tool-flash');
+        setTimeout(() => {
+          selectBtn.classList.remove('tool-flash');
+          selectBtn.classList.add('active');
+        }, 800);
+      }
+      setStatus('Brace selected — 16mm width');
+      setBadge('Part Selected', 'bg-cyan-500/10 border border-cyan-500/30 text-accent-cyan');
+      appendLog('▸ selected: vertical_brace_001 (16mm)', '#06b6d4');
+      await T(700);
+
+      // PHASE 6: User types in chat input
+      chatInput.style.color = '#e2e8f0';
+      chatInput.classList.add('chat-input-active');
+      const msg = 'make the support brace wider';
+      chatInput.textContent = '';
+      for (const ch of msg) {
+        chatInput.textContent += ch;
+        await new Promise(r => setTimeout(r, 42));
+      }
+      await T(350);
+
+      // Send — clear input, bubble appears
+      chatInput.classList.remove('chat-input-active');
+      chatInput.style.color = '';
+      chatInput.textContent = 'Type a message...';
+      addChatMsg(msg, 'user');
+      await T(300);
+
+      // PHASE 7: AI typing → response
+      setBadge('Processing…', 'bg-indigo-500/10 border border-indigo-500/30 text-accent-indigo');
+      setStatus('Updating brace geometry...');
+      showTypingIndicator();
+      await T(1500);
+      removeTypingIndicator();
+      addChatMsg('Updating brace width from 16mm → 28mm…', 'agent');
+      await T(600);
+
+      // PHASE 8: Brace geometry updates
+      // Fade out original brace parts
+      ['cw-brace-front','cw-brace-side','cw-brace-edge','cw-brace-bolt','cw-brace-bolt-inner'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.style.transition = 'opacity 0.35s'; el.style.opacity = '0'; }
+      });
+      braceSelect.style.opacity = '0';
+      await T(380);
+
+      // Fade in wider brace
+      ['cw-brace-front-wide','cw-brace-side-wide','cw-brace-edge-wide'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.style.transition = 'opacity 0.35s'; el.style.opacity = '1'; }
+      });
+      verts += 4; faces += 2;
+      document.getElementById('demo-verts').textContent = verts;
+      document.getElementById('demo-faces').textContent = faces;
+      await T(500);
+
+      addChatMsg('Done ✓  Brace width: 28mm', 'agent');
+      setBadge('✓ Updated', 'bg-green-500/10 border border-green-500/30 text-green-400');
+      setStatus('Brace updated: 16mm → 28mm');
+      appendLog('✓ brace_width updated: 16mm → 28mm', '#22c55e');
+
+      await T(1200);
+      replayBtn.disabled = false;
+      replayBtn.style.opacity = '1';
+      demoRunning = false;
+    }
+
+    // ── Toolbar tool selection ─────────────────────────────────
+    function activateTool(btn) {
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    // Auto-start demo when section scrolls into view (once)
+    let demoStarted = false;
+    const demoObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting && !demoStarted) {
+            demoStarted = true;
+            setTimeout(runDemo, 500);
+          }
+        });
+      },
+      { threshold: 0.3 }
+    );
+    const demoWindow = document.getElementById('demo-window');
+    if (demoWindow) demoObserver.observe(demoWindow);
+
+    // Image upload handler — reveals email field
+    function onImageSelected(input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      const zone = document.getElementById('upload-zone');
+      const label = document.getElementById('upload-label');
+      const icon = document.getElementById('upload-icon');
+      const emailStep = document.getElementById('email-step');
+
+      // Show filename confirmation in the drop zone
+      icon.setAttribute('stroke', '#22c55e');
+      label.innerHTML = `
+        <div class="text-sm font-semibold text-green-400">
+          <svg class="inline mr-1" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          ${file.name}
+        </div>
+        <div class="text-xs text-text-muted mt-1">Image ready — now enter your email below</div>`;
+      zone.classList.add('border-green-500/40');
+      zone.classList.remove('border-border-light');
+
+      // Reveal email field with animation
+      emailStep.classList.remove('hidden');
+      emailStep.style.opacity = '0';
+      emailStep.style.transform = 'translateY(8px)';
+      emailStep.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+      requestAnimationFrame(() => {
+        emailStep.style.opacity = '1';
+        emailStep.style.transform = 'translateY(0)';
+      });
+
+      document.getElementById('email-input').focus();
+    }
+
+    // Form submission
+    function handleSubmit(e) {
+      e.preventDefault();
+      const form   = document.getElementById('waitlist-form');
+      const thanks = document.getElementById('thank-you');
+
+      if (form.action.includes('YOUR_FORM_ID')) {
+        form.closest('.max-w-lg').classList.add('hidden');
+        thanks.classList.remove('hidden');
+        return;
+      }
+
+      fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'Accept': 'application/json' },
+      }).then(res => {
+        if (res.ok) {
+          form.closest('.max-w-lg').classList.add('hidden');
+          thanks.classList.remove('hidden');
+        } else {
+          alert('Something went wrong. Please try again.');
+        }
+      }).catch(() => {
+        alert('Something went wrong. Please try again.');
+      });
+    }
+  </script>
+
+</body>
+</html>

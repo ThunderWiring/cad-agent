@@ -1,0 +1,126 @@
+Landing Page Feedback (Focus: Validation, Not Polish)
+
+This landing page is already strong in terms of design and UX. It looks more polished than most early-stage products. However, for validation, there is a critical issue:
+
+The page is trying to communicate too many ideas instead of testing one clear hypothesis.
+
+What’s working well
+The UI and overall polish are excellent. The visual hierarchy is clear, and the animated demo adds strong credibility.
+The flow is easy to understand: Idea → AI → Edit → Print. This mental model works.
+The headline focuses on outcome (“From Idea to Object — Ready to Print”), which is the right direction.
+Core problem
+
+The page is trying to sell multiple concepts at once:
+
+Image → CAD
+Prompt-based editing
+Full CAD system
+Parametric modeling
+Export formats
+Browser-based CAD
+
+This creates confusion. A new user cannot quickly understand:
+
+“What is the one thing this product does for me?”
+
+What should be validated
+
+The key question right now is:
+
+Do users want to turn an image into a 3D-printable model?
+
+However, the page mixes this with advanced CAD messaging, which targets a different audience and weakens the validation signal.
+
+What to remove or simplify
+Remove “Full Manual CAD Control” messaging
+→ It intimidates beginners and attracts the wrong users.
+Replace technical claims like:
+“fully editable parametric CAD model”
+→ with simpler language like:
+“a model you can tweak and print”
+Remove weak credibility signals such as:
+“< 10s generation time”, “100% browser-based”
+→ These don’t build trust without proof and are not important at this stage.
+Biggest issue: credibility gap
+
+Statements like:
+“reconstructs the object as editable 3D geometry — automatically”
+
+can feel unrealistic or overhyped, especially to technical users. This may cause users to lose trust and leave.
+
+High-impact improvements
+
+Narrow the core promise (most important)
+Shift positioning to something more specific and believable:
+
+Example:
+“Turn simple objects from images into 3D-printable models you can tweak”
+
+Even better:
+“Upload an image → get a printable model (best for simple parts like stands, holders, hooks)”
+
+Add concrete examples
+Replace abstract messaging with clear use cases:
+
+Phone stand
+Wall hook
+Cable holder
+
+Users need to immediately understand what they can create.
+
+Update the CTA for validation
+Replace:
+“Join the Waitlist”
+
+With:
+“Upload an image — we’ll generate your model”
+
+Even if this is handled manually behind the scenes.
+
+Introduce friction-based validation
+
+Instead of:
+
+Email → done
+
+Use:
+
+Upload image → then request email
+
+This ensures stronger intent signals.
+
+Tone down the “magic”
+
+Replace:
+“AI reconstructs geometry”
+
+With:
+“We generate a starting model you can refine”
+
+This improves trust and sets realistic expectations.
+
+What the current page is actually testing
+
+Right now, the page validates:
+
+“Do people like the idea of AI-powered CAD?”
+
+But that’s already known.
+
+What you need to validate is:
+
+“Do users want to convert images into printable models?”
+
+The current messaging does not isolate this.
+
+Suggested hero rewrite
+
+Headline:
+Turn an Image into a 3D-Printable Model
+
+Subheadline:
+Upload a photo of a simple object — like a stand, hook, or holder.
+We’ll generate a model you can tweak and print.
+
+CTA:
+Upload Your Image
