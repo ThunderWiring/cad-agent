@@ -1084,48 +1084,6 @@
 
       </div>
 
-      <!-- Secondary feature row -->
-      <div class="grid md:grid-cols-2 gap-6 mt-6">
-
-        <!-- Feature: Export -->
-        <div class="reveal card-glow rounded-2xl overflow-hidden" style="transition-delay:0.4s">
-          <div class="bg-bg-surface border border-border rounded-2xl p-7">
-            <div class="flex items-start gap-5">
-              <div class="icon-ring w-14 h-14 rounded-xl flex-shrink-0 flex items-center justify-center">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-              </div>
-              <div>
-                <h3 class="text-lg font-bold text-text-primary mb-2">Send Straight to Your Printer</h3>
-                <p class="text-text-secondary text-sm leading-relaxed">Export as STL or STEP and open directly in your slicer. Works with standard FDM printers out of the box.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Feature: In-browser -->
-        <div class="reveal card-glow rounded-2xl overflow-hidden" style="transition-delay:0.5s">
-          <div class="bg-bg-surface border border-border rounded-2xl p-7">
-            <div class="flex items-start gap-5">
-              <div class="icon-ring w-14 h-14 rounded-xl flex-shrink-0 flex items-center justify-center">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="2" y1="12" x2="22" y2="12"/>
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                </svg>
-              </div>
-              <div>
-                <h3 class="text-lg font-bold text-text-primary mb-2">No Software to Install</h3>
-                <p class="text-text-secondary text-sm leading-relaxed">Everything runs in the browser. Upload your image, get your model, export it — no account required to try.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
     </div>
   </section>
 
@@ -1151,8 +1109,6 @@
         <!-- Email form -->
         <div class="max-w-lg mx-auto mb-4">
           <form id="waitlist-form" class="flex flex-col sm:flex-row gap-3"
-                action="https://formspree.io/f/YOUR_FORM_ID"
-                method="POST"
                 onsubmit="handleSubmit(event)">
             <input
               type="email"
@@ -1640,34 +1596,60 @@
       document.getElementById('email-input').focus();
     }
 
-    // Form submission
+    // Form submission — posts to Kit.com
     function handleSubmit(e) {
       e.preventDefault();
-      const form   = document.getElementById('waitlist-form');
-      const thanks = document.getElementById('thank-you');
+      const form      = document.getElementById('waitlist-form');
+      const thanks    = document.getElementById('thank-you');
+      const email     = document.getElementById('email-input').value.trim();
+      const submitBtn = form.querySelector('button[type="submit"]');
 
-      if (form.action.includes('YOUR_FORM_ID')) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Joining…';
+
+      function showSuccess() {
         form.closest('.max-w-lg').classList.add('hidden');
         thanks.classList.remove('hidden');
-        return;
       }
 
-      fetch(form.action, {
-        method: 'POST',
-        body: new FormData(form),
-        headers: { 'Accept': 'application/json' },
-      }).then(res => {
-        if (res.ok) {
-          form.closest('.max-w-lg').classList.add('hidden');
-          thanks.classList.remove('hidden');
+      function submitViaKitScript() {
+        // Programmatically fill & submit the hidden Kit.com form
+        const host = document.getElementById('kit-form-host');
+        const kitEmailInput = host && host.querySelector('input[type="email"], input[name="email_address"]');
+        const kitForm = kitEmailInput && kitEmailInput.closest('form');
+        if (kitForm && kitEmailInput) {
+          kitEmailInput.value = email;
+          const data = new FormData(kitForm);
+          fetch(kitForm.action, { method: 'POST', body: data })
+            .finally(showSuccess);
         } else {
-          alert('Something went wrong. Please try again.');
+          // Script not yet loaded — retry once after a short delay
+          setTimeout(() => {
+            const ki = host && host.querySelector('input[type="email"], input[name="email_address"]');
+            const kf = ki && ki.closest('form');
+            if (kf) { ki.value = email; fetch(kf.action, { method: 'POST', body: new FormData(kf) }).finally(showSuccess); }
+            else showSuccess();
+          }, 1500);
         }
-      }).catch(() => {
-        alert('Something went wrong. Please try again.');
-      });
+      }
+
+      fetch('https://app.kit.com/forms/f9a18f5512/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'email_address=' + encodeURIComponent(email),
+      })
+      .then(res => {
+        if (res.ok) { showSuccess(); }
+        else { submitViaKitScript(); }
+      })
+      .catch(() => submitViaKitScript());
     }
   </script>
+
+  <!-- Kit.com form (hidden — used as submission target) -->
+  <div id="kit-form-host" style="display:none" aria-hidden="true">
+    <script async data-uid="f9a18f5512" src="https://printforge-ai.kit.com/f9a18f5512/index.js"></script>
+  </div>
 
 </body>
 </html>
